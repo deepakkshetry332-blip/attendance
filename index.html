@@ -5,87 +5,255 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Attendance</title>
+    <title>Attendance Pro</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Chart.js for Analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'media',
+            theme: {
+                extend: {
+                    colors: { primary: '#6366f1', secondary: '#a855f7', dark: '#0f172a' },
+                    animation: { 'bounce-slow': 'bounce 3s infinite' }
+                }
+            }
+        }
+    </script>
     <style>
-        body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; background-color: #f8fafc; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
-        .no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+        .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.5); }
+        @media (prefers-color-scheme: dark) {
+            body { background-color: #0f172a; color: white; }
+            .glass { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); }
+            .card-bg { background-color: #1e293b; }
+        }
     </style>
 </head>
-<body>
+<body class="bg-slate-50 text-slate-900 transition-colors duration-300">
     <div id="root"></div>
-    <script type="text/babel">
-        const { useState, useEffect } = React;
-        const IconPlus = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
-        const IconTrash = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>;
-        const IconChevron = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>;
-        const IconCheck = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>;
-        const IconX = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
-        const IconBack = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>;
 
-        const Card = ({ children, className = "" }) => <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-4 ${className}`}>{children}</div>;
-        const Button = ({ onClick, children, variant = "primary", className = "", size = "md" }) => {
-            const base = "font-semibold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2";
-            const v = { primary: "bg-blue-600 text-white shadow-lg shadow-blue-200", secondary: "bg-gray-100 text-gray-700", danger: "bg-red-50 text-red-600" };
-            const s = { sm: "px-3 py-1.5 text-sm", md: "px-4 py-3", icon: "p-3" };
-            return <button onClick={onClick} className={`${base} ${v[variant]} ${s[size]} ${className}`}>{children}</button>;
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        
+        // Icons
+        const Icon = ({ name, size=24 }) => {
+            const icons = {
+                user: <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>,
+                circle: <circle cx="12" cy="7" r="4"></circle>,
+                plus: <line x1="12" y1="5" x2="12" y2="19"></line>,
+                plus2: <line x1="5" y1="12" x2="19" y2="12"></line>,
+                trash: <polyline points="3 6 5 6 21 6"></polyline>,
+                trash2: <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>,
+                check: <polyline points="20 6 9 17 4 12"></polyline>,
+                x: <line x1="18" y1="6" x2="6" y2="18"></line>,
+                x2: <line x1="6" y1="6" x2="18" y2="18"></line>,
+                back: <polyline points="15 18 9 12 15 6"></polyline>,
+                download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>,
+                downArr: <polyline points="7 10 12 15 17 10"></polyline>,
+                line: <line x1="12" y1="15" x2="12" y2="3"></line>
+            };
+            return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{icons[name]}{name==='user'&&icons.circle}{name==='plus'&&icons.plus2}{name==='trash'&&icons.trash2}{name==='x'&&icons.x2}{name==='download'&&icons.downArr}{name==='download'&&icons.line}</svg>;
         };
 
+        const Button = ({ onClick, children, variant="primary", className="" }) => {
+            const base = "font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 py-3 px-4 shadow-lg";
+            const v = {
+                primary: "bg-gradient-to-r from-primary to-secondary text-white shadow-primary/30",
+                danger: "bg-red-500 text-white shadow-red-500/30",
+                ghost: "bg-transparent shadow-none text-slate-500 dark:text-slate-400"
+            };
+            return <button onClick={onClick} className={`${base} ${v[variant]} ${className}`}>{children}</button>;
+        };
+
+        // --- Login Screen ---
+        const Login = ({ onLogin }) => (
+            <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-indigo-500 to-purple-600">
+                <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl w-full max-w-sm text-center animate-bounce-slow">
+                    <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600">
+                        <Icon name="user" size={40} />
+                    </div>
+                    <h1 className="text-2xl font-bold mb-2 dark:text-white">Welcome Back</h1>
+                    <p className="text-slate-400 mb-6">Student Attendance System</p>
+                    <Button onClick={onLogin} className="w-full">Enter Dashboard</Button>
+                    <p className="mt-4 text-xs text-slate-400">Secure Local Session</p>
+                </div>
+            </div>
+        );
+
+        // --- Main App ---
         function App() {
+            const [user, setUser] = useState(false);
             const [classes, setClasses] = useState(() => { const s = localStorage.getItem('classes'); return s ? JSON.parse(s) : []; });
             const [selClass, setSelClass] = useState(null);
             const [view, setView] = useState('list');
-            const [newName, setNewName] = useState("");
-            const [newStu, setNewStu] = useState("");
+            const [input, setInput] = useState("");
+            
             useEffect(() => { localStorage.setItem('classes', JSON.stringify(classes)); }, [classes]);
 
-            const addClass = () => { if (!newName.trim()) return; setClasses([...classes, { id: Date.now(), name: newName, students: [], sessions: [] }]); setNewName(""); };
-            const delClass = (id) => { if (confirm("Delete?")) { setClasses(classes.filter(c => c.id !== id)); if (selClass?.id === id) setView('list'); } };
-            const addStu = () => { if (!newStu.trim() || !selClass) return; const up = classes.map(c => c.id === selClass.id ? { ...c, students: [...c.students, { id: Date.now(), name: newStu }] } : c); setClasses(up); setSelClass(up.find(c => c.id === selClass.id)); setNewStu(""); };
-            const saveAtt = (st) => { const sess = { id: Date.now(), date: new Date().toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'}), records: st }; const up = classes.map(c => c.id === selClass.id ? { ...c, sessions: [sess, ...c.sessions] } : c); setClasses(up); setSelClass(up.find(c => c.id === selClass.id)); setView('detail'); };
+            // CRUD
+            const addClass = () => { if(!input.trim())return; setClasses([...classes, {id:Date.now(), name:input, students:[], sessions:[]}]); setInput(""); };
+            const delClass = (id) => { if(confirm("Delete Class?")) setClasses(classes.filter(c=>c.id!==id)); };
+            const addStu = () => { if(!input.trim())return; const up=classes.map(c=>c.id===selClass.id?{...c, students:[...c.students, {id:Date.now(), name:input}]}:c); setClasses(up); setSelClass(up.find(c=>c.id===selClass.id)); setInput(""); };
+            
+            // Attendance Logic
+            const saveAtt = (st) => { 
+                const sess = {id:Date.now(), date: new Date().toLocaleDateString(), records: st};
+                const up=classes.map(c=>c.id===selClass.id?{...c, sessions:[sess, ...c.sessions]}:c);
+                setClasses(up); setSelClass(up.find(c=>c.id===selClass.id)); setView('detail');
+            };
 
-            if (view === 'list') return (
-                <div className="max-w-md mx-auto min-h-screen px-6 pt-4 space-y-6">
-                    <header><h1 className="text-3xl font-bold text-slate-900">My Classes</h1><p className="text-slate-500">Attendance Tracker</p></header>
-                    <div className="flex gap-2"><input type="text" placeholder="Class Name" className="flex-1 px-4 py-3 rounded-xl border border-gray-200 outline-none" value={newName} onChange={e=>setNewName(e.target.value)} /><Button onClick={addClass} size="icon"><IconPlus /></Button></div>
-                    <div className="grid gap-3">{classes.map(c => <Card key={c.id} className="relative active:bg-gray-50"><div className="absolute inset-0" onClick={()=>{setSelClass(c);setView('detail')}}></div><div className="flex justify-between items-center pointer-events-none"><div><h3 className="font-bold text-lg">{c.name}</h3><p className="text-sm text-slate-500">{c.students.length} Students</p></div><div className="flex items-center gap-3 pointer-events-auto"><button onClick={()=>delClass(c.id)} className="p-2 text-gray-300 hover:text-red-500"><IconTrash /></button><IconChevron /></div></div></Card>)}{classes.length===0 && <p className="text-center text-gray-400 py-10">No classes yet.</p>}</div>
+            // CSV Export
+            const exportCSV = () => {
+                let csvContent = "data:text/csv;charset=utf-8,Student Name,Total Present,Total Sessions,Percentage\n";
+                const total = selClass.sessions.length;
+                selClass.students.forEach(s => {
+                    let p=0; selClass.sessions.forEach(sess=>{if(sess.records[s.id]==='present')p++});
+                    const pct = total===0?0:Math.round((p/total)*100);
+                    csvContent += `${s.name},${p},${total},${pct}%\n`;
+                });
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", `${selClass.name}_Report.csv`);
+                document.body.appendChild(link);
+                link.click();
+            };
+
+            if (!user) return <Login onLogin={() => setUser(true)} />;
+
+            return (
+                <div className="max-w-md mx-auto min-h-screen p-6 pb-24">
+                    {/* Header */}
+                    <div className="flex justify-between items-center mb-8">
+                        {view !== 'list' ? (
+                            <button onClick={()=>setView(view==='mark'?'detail':'list')} className="p-3 bg-white dark:bg-slate-800 rounded-full shadow-sm"><Icon name="back"/></button>
+                        ) : (
+                            <div>
+                                <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">Dashboard</h1>
+                                <p className="text-slate-500 dark:text-slate-400 text-sm">Today: {new Date().toLocaleDateString()}</p>
+                            </div>
+                        )}
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-white font-bold">A</div>
+                    </div>
+
+                    {/* Views */}
+                    {view === 'list' && (
+                        <div className="space-y-6 animate-fade-in">
+                            <div className="glass p-2 rounded-2xl flex gap-2">
+                                <input className="bg-transparent flex-1 px-4 outline-none dark:text-white" placeholder="New Subject Name..." value={input} onChange={e=>setInput(e.target.value)} />
+                                <Button onClick={addClass} className="!py-2 !px-3 rounded-lg"><Icon name="plus"/></Button>
+                            </div>
+                            <div className="grid gap-4">
+                                {classes.map(c => (
+                                    <div key={c.id} onClick={()=>{setSelClass(c); setView('detail')}} className="card-bg bg-white p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 active:scale-95 transition-transform relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <h2 className="text-xl font-bold dark:text-white">{c.name}</h2>
+                                                <p className="text-slate-500 text-sm">{c.students.length} Students • {c.sessions.length} Sessions</p>
+                                            </div>
+                                            <button onClick={(e)=>{e.stopPropagation();delClass(c.id)}} className="z-10 text-slate-300 hover:text-red-500"><Icon name="trash"/></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {view === 'detail' && (
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-gradient-to-br from-primary to-secondary p-5 rounded-2xl text-white shadow-lg shadow-primary/20">
+                                    <p className="text-xs opacity-80">Total Students</p>
+                                    <p className="text-3xl font-bold">{selClass.students.length}</p>
+                                </div>
+                                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                    <p className="text-xs text-slate-500">Classes Held</p>
+                                    <p className="text-3xl font-bold dark:text-white">{selClass.sessions.length}</p>
+                                </div>
+                            </div>
+
+                            <Button onClick={()=>setView('mark')} className="w-full shadow-xl">Start Attendance Session</Button>
+                            <Button onClick={exportCSV} variant="ghost" className="w-full border border-dashed border-slate-300"><Icon name="download"/> Export Report (CSV)</Button>
+
+                            <div className="mt-6">
+                                <div className="flex justify-between items-end mb-4">
+                                    <h3 className="font-bold text-lg dark:text-white">Student List</h3>
+                                    <div className="flex gap-2">
+                                        <input className="bg-white dark:bg-slate-800 px-3 py-1 rounded-lg text-sm border-none outline-none dark:text-white w-32" placeholder="Add Name" value={input} onChange={e=>setInput(e.target.value)} />
+                                        <button onClick={addStu} className="text-primary font-bold">+</button>
+                                    </div>
+                                </div>
+                                <div className="space-y-3">
+                                    {selClass.students.map(s => {
+                                        let p=0; selClass.sessions.forEach(sess=>{if(sess.records[s.id]==='present')p++});
+                                        const pct = selClass.sessions.length===0?0:Math.round((p/selClass.sessions.length)*100);
+                                        return (
+                                            <div key={s.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl flex justify-between items-center shadow-sm">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-2 h-10 rounded-full ${pct<75?'bg-red-500':'bg-green-500'}`}></div>
+                                                    <div>
+                                                        <p className="font-bold dark:text-white">{s.name}</p>
+                                                        <p className="text-xs text-slate-400">{pct}% Attendance</p>
+                                                    </div>
+                                                </div>
+                                                <span className="font-mono font-bold text-slate-300">{p}/{selClass.sessions.length}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {view === 'mark' && <MarkSession selClass={selClass} onSave={saveAtt} onCancel={()=>setView('detail')} />}
                 </div>
             );
-            if (view === 'detail') return (
-                <div className="max-w-md mx-auto min-h-screen px-6 pt-4 space-y-6">
-                    <header className="flex items-center gap-2"><button onClick={()=>setView('list')} className="p-2 -ml-2"><IconBack /></button><h1 className="text-2xl font-bold">{selClass.name}</h1></header>
-                    <div className="grid grid-cols-2 gap-3"><Button onClick={()=>setView('mark')} className="w-full">Mark Today</Button><Button variant="secondary" onClick={()=>setView('stats')} className="w-full">Stats</Button></div>
-                    <div><div className="flex gap-2 mb-4"><input type="text" placeholder="Add Student" className="flex-1 px-4 py-2 rounded-xl border border-gray-200 outline-none" value={newStu} onChange={e=>setNewStu(e.target.value)} /><Button onClick={addStu} size="sm">Add</Button></div><div className="space-y-2">{selClass.students.map(s=><div key={s.id} className="flex justify-between p-3 bg-white rounded-xl border border-gray-100"><span className="font-medium">{s.name}</span></div>)}</div></div>
-                </div>
-            );
-            if (view === 'mark') {
-                const [st, setSt] = useState({});
-                useEffect(() => { const i={}; selClass.students.forEach(s=>i[s.id]='present'); setSt(i); }, []);
-                const tog = (id) => setSt(p=>({...p, [id]: p[id]==='present'?'absent':'present'}));
-                const cnt = Object.values(st).filter(s=>s==='present').length;
-                return (
-                    <div className="max-w-md mx-auto min-h-screen px-6 pt-4 flex flex-col h-[90vh]">
-                        <header className="flex justify-between items-center mb-6"><button onClick={()=>setView('detail')} className="text-gray-500">Cancel</button><div className="font-bold">New Session</div><button onClick={()=>saveAtt(st)} className="text-blue-600 font-bold">Save</button></header>
-                        <div className="bg-blue-50 p-4 rounded-xl mb-6 text-center font-bold text-blue-600 text-xl">{cnt} / {selClass.students.length} Present</div>
-                        <div className="flex-1 overflow-y-auto space-y-3">{selClass.students.map(s=>{ const p=st[s.id]==='present'; return <div key={s.id} onClick={()=>tog(s.id)} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${p?'bg-white':'bg-red-50 border-red-100'}`}><span className={`font-medium ${p?'text-slate-700':'text-red-700'}`}>{s.name}</span><div className={`w-8 h-8 rounded-full flex items-center justify-center ${p?'bg-green-500 text-white':'bg-red-500 text-white'}`}>{p?<IconCheck />:<IconX />}</div></div>})}</div>
-                    </div>
-                );
-            }
-            if (view === 'stats') {
-                const tot = selClass.sessions.length;
-                return (
-                    <div className="max-w-md mx-auto min-h-screen px-6 pt-4 space-y-6">
-                        <header className="flex items-center gap-2"><button onClick={()=>setView('detail')} className="p-2 -ml-2"><IconBack /></button><h1 className="text-2xl font-bold">Statistics</h1></header>
-                        <div className="grid gap-3">{selClass.students.map(s=>{ let p=0; selClass.sessions.forEach(sess=>{if(sess.records[s.id]==='present')p++}); const pct=tot===0?0:Math.round((p/tot)*100); return <div key={s.id} className="bg-white p-4 rounded-xl border border-gray-100"><div className="flex justify-between mb-2 font-semibold"><span>{s.name}</span><span className={pct<75?"text-red-500":"text-green-600"}>{pct}%</span></div><div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden"><div className={`h-full ${pct<75?"bg-red-500":"bg-green-500"}`} style={{width: `${pct}%`}}></div></div></div>})}</div>
-                    </div>
-                );
-            }
         }
+
+        const MarkSession = ({ selClass, onSave, onCancel }) => {
+            const [st, setSt] = useState({});
+            useEffect(() => { const i={}; selClass.students.forEach(s=>i[s.id]='present'); setSt(i); }, []);
+            const toggle = (id) => setSt(p=>({...p, [id]: p[id]==='present'?'absent':'present'}));
+            const count = Object.values(st).filter(s=>s==='present').length;
+
+            return (
+                <div className="flex flex-col h-[85vh]">
+                    <div className="text-center mb-6">
+                        <h2 className="text-2xl font-bold dark:text-white">Roll Call</h2>
+                        <p className="text-primary font-medium">{count} Present</p>
+                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-3 px-1">
+                        {selClass.students.map(s => {
+                            const isP = st[s.id] === 'present';
+                            return (
+                                <div key={s.id} onClick={()=>toggle(s.id)} className={`p-4 rounded-2xl flex items-center justify-between transition-all cursor-pointer border-2 ${isP ? 'bg-white dark:bg-slate-800 border-transparent shadow-sm' : 'bg-red-50 border-red-500 dark:bg-red-900/20'}`}>
+                                    <span className={`font-bold ${isP?'dark:text-white':'text-red-600'}`}>{s.name}</span>
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isP?'bg-green-100 text-green-600':'bg-red-500 text-white'}`}>
+                                        <Icon name={isP?'check':'x'} size={16}/>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-4">
+                        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+                        <Button onClick={()=>onSave(st)}>Save Record</Button>
+                    </div>
+                </div>
+            );
+        }
+
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
 </body>
 </html>
+
+
