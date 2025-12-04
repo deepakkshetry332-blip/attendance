@@ -5,246 +5,477 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Attendance Pro</title>
+    <title>AttendPro V3</title>
     
+    <!-- Core Libraries -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Chart.js for Analytics -->
+    <!-- Security & Tools -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
+    <script src="https://unpkg.com/lucide@latest"></script>
+
     <script>
         tailwind.config = {
-            darkMode: 'media',
+            darkMode: 'class',
             theme: {
                 extend: {
-                    colors: { primary: '#6366f1', secondary: '#a855f7', dark: '#0f172a' },
-                    animation: { 'bounce-slow': 'bounce 3s infinite' }
+                    colors: { brand: '#0ea5e9', dark: '#0f172a', surface: '#1e293b' }
                 }
             }
         }
     </script>
     <style>
-        body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
-        .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.5); }
-        @media (prefers-color-scheme: dark) {
-            body { background-color: #0f172a; color: white; }
-            .glass { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); }
-            .card-bg { background-color: #1e293b; }
-        }
+        body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+        .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        .sidebar-active { background: rgba(14, 165, 233, 0.15); color: #0ea5e9; border-right: 3px solid #0ea5e9; }
+        /* Hide scrollbar */
+        ::-webkit-scrollbar { width: 0px; background: transparent; }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-900 transition-colors duration-300">
+<body class="bg-dark text-slate-200 h-screen overflow-hidden selection:bg-brand selection:text-white">
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
+
+        // --- SECURITY ENGINE (AES-256) ---
+        const SECRET_KEY = "FINAL_YEAR_PROJECT_SECURE_KEY"; // In real app, user sets this
         
-        // Icons
-        const Icon = ({ name, size=24 }) => {
-            const icons = {
-                user: <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>,
-                circle: <circle cx="12" cy="7" r="4"></circle>,
-                plus: <line x1="12" y1="5" x2="12" y2="19"></line>,
-                plus2: <line x1="5" y1="12" x2="19" y2="12"></line>,
-                trash: <polyline points="3 6 5 6 21 6"></polyline>,
-                trash2: <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>,
-                check: <polyline points="20 6 9 17 4 12"></polyline>,
-                x: <line x1="18" y1="6" x2="6" y2="18"></line>,
-                x2: <line x1="6" y1="6" x2="18" y2="18"></line>,
-                back: <polyline points="15 18 9 12 15 6"></polyline>,
-                download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>,
-                downArr: <polyline points="7 10 12 15 17 10"></polyline>,
-                line: <line x1="12" y1="15" x2="12" y2="3"></line>
-            };
-            return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{icons[name]}{name==='user'&&icons.circle}{name==='plus'&&icons.plus2}{name==='trash'&&icons.trash2}{name==='x'&&icons.x2}{name==='download'&&icons.downArr}{name==='download'&&icons.line}</svg>;
+        const encryptData = (data) => CryptoJS.AES.encrypt(JSON.stringify(data), SECRET_KEY).toString();
+        const decryptData = (cipher) => {
+            try {
+                const bytes = CryptoJS.AES.decrypt(cipher, SECRET_KEY);
+                return JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
+            } catch (e) { return null; }
         };
 
-        const Button = ({ onClick, children, variant="primary", className="" }) => {
-            const base = "font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 py-3 px-4 shadow-lg";
+        // --- COMPONENTS ---
+        const Icon = ({ name, size=20, className="" }) => {
+            return <i data-lucide={name} className={className} style={{width: size, height: size}}></i>;
+        };
+
+        const Button = ({ onClick, children, variant="brand", className="", icon }) => {
             const v = {
-                primary: "bg-gradient-to-r from-primary to-secondary text-white shadow-primary/30",
-                danger: "bg-red-500 text-white shadow-red-500/30",
-                ghost: "bg-transparent shadow-none text-slate-500 dark:text-slate-400"
+                brand: "bg-brand text-white hover:bg-sky-400 shadow-lg shadow-sky-900/50",
+                danger: "bg-red-500/10 text-red-400 border border-red-500/50 hover:bg-red-500/20",
+                ghost: "hover:bg-white/5 text-slate-400 hover:text-white",
+                outline: "border border-slate-600 hover:border-brand hover:text-brand"
             };
-            return <button onClick={onClick} className={`${base} ${v[variant]} ${className}`}>{children}</button>;
+            return (
+                <button onClick={onClick} className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold transition-all active:scale-95 ${v[variant]} ${className}`}>
+                    {icon && <Icon name={icon} size={18} />}
+                    {children}
+                </button>
+            );
         };
 
-        // --- Login Screen ---
-        const Login = ({ onLogin }) => (
-            <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-indigo-500 to-purple-600">
-                <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl w-full max-w-sm text-center animate-bounce-slow">
-                    <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600">
-                        <Icon name="user" size={40} />
-                    </div>
-                    <h1 className="text-2xl font-bold mb-2 dark:text-white">Welcome Back</h1>
-                    <p className="text-slate-400 mb-6">Student Attendance System</p>
-                    <Button onClick={onLogin} className="w-full">Enter Dashboard</Button>
-                    <p className="mt-4 text-xs text-slate-400">Secure Local Session</p>
-                </div>
-            </div>
-        );
+        // --- AUTH SCREEN ---
+        const Login = ({ onSuccess }) => {
+            const [pin, setPin] = useState("");
+            const [error, setError] = useState("");
+            const [setupMode, setSetupMode] = useState(!localStorage.getItem("admin_pin"));
 
-        // --- Main App ---
-        function App() {
-            const [user, setUser] = useState(false);
-            const [classes, setClasses] = useState(() => { const s = localStorage.getItem('classes'); return s ? JSON.parse(s) : []; });
-            const [selClass, setSelClass] = useState(null);
-            const [view, setView] = useState('list');
-            const [input, setInput] = useState("");
-            
-            useEffect(() => { localStorage.setItem('classes', JSON.stringify(classes)); }, [classes]);
-
-            // CRUD
-            const addClass = () => { if(!input.trim())return; setClasses([...classes, {id:Date.now(), name:input, students:[], sessions:[]}]); setInput(""); };
-            const delClass = (id) => { if(confirm("Delete Class?")) setClasses(classes.filter(c=>c.id!==id)); };
-            const addStu = () => { if(!input.trim())return; const up=classes.map(c=>c.id===selClass.id?{...c, students:[...c.students, {id:Date.now(), name:input}]}:c); setClasses(up); setSelClass(up.find(c=>c.id===selClass.id)); setInput(""); };
-            
-            // Attendance Logic
-            const saveAtt = (st) => { 
-                const sess = {id:Date.now(), date: new Date().toLocaleDateString(), records: st};
-                const up=classes.map(c=>c.id===selClass.id?{...c, sessions:[sess, ...c.sessions]}:c);
-                setClasses(up); setSelClass(up.find(c=>c.id===selClass.id)); setView('detail');
+            const handleLogin = () => {
+                if (setupMode) {
+                    if (pin.length < 4) return setError("PIN too short");
+                    // Hash the PIN for storage
+                    localStorage.setItem("admin_pin", CryptoJS.SHA256(pin).toString());
+                    setSetupMode(false);
+                    setPin("");
+                    alert("Admin PIN Set Successfully! Please Login.");
+                } else {
+                    const storedHash = localStorage.getItem("admin_pin");
+                    if (CryptoJS.SHA256(pin).toString() === storedHash) {
+                        onSuccess();
+                    } else {
+                        setError("Access Denied: Invalid Credentials");
+                        setPin("");
+                    }
+                }
             };
-
-            // CSV Export
-            const exportCSV = () => {
-                let csvContent = "data:text/csv;charset=utf-8,Student Name,Total Present,Total Sessions,Percentage\n";
-                const total = selClass.sessions.length;
-                selClass.students.forEach(s => {
-                    let p=0; selClass.sessions.forEach(sess=>{if(sess.records[s.id]==='present')p++});
-                    const pct = total===0?0:Math.round((p/total)*100);
-                    csvContent += `${s.name},${p},${total},${pct}%\n`;
-                });
-                const encodedUri = encodeURI(csvContent);
-                const link = document.createElement("a");
-                link.setAttribute("href", encodedUri);
-                link.setAttribute("download", `${selClass.name}_Report.csv`);
-                document.body.appendChild(link);
-                link.click();
-            };
-
-            if (!user) return <Login onLogin={() => setUser(true)} />;
 
             return (
-                <div className="max-w-md mx-auto min-h-screen p-6 pb-24">
-                    {/* Header */}
-                    <div className="flex justify-between items-center mb-8">
-                        {view !== 'list' ? (
-                            <button onClick={()=>setView(view==='mark'?'detail':'list')} className="p-3 bg-white dark:bg-slate-800 rounded-full shadow-sm"><Icon name="back"/></button>
-                        ) : (
-                            <div>
-                                <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">Dashboard</h1>
-                                <p className="text-slate-500 dark:text-slate-400 text-sm">Today: {new Date().toLocaleDateString()}</p>
+                <div className="h-screen flex flex-col items-center justify-center bg-dark relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
+                    <div className="z-10 bg-surface/50 p-8 rounded-3xl border border-white/10 backdrop-blur-xl w-80 shadow-2xl">
+                        <div className="w-16 h-16 bg-brand/20 rounded-full flex items-center justify-center mx-auto mb-6 text-brand">
+                            <Icon name="shield-check" size={32} />
+                        </div>
+                        <h1 className="text-2xl font-bold text-center text-white mb-1">
+                            {setupMode ? "System Setup" : "Admin Portal"}
+                        </h1>
+                        <p className="text-center text-slate-400 text-sm mb-6">
+                            {setupMode ? "Create Secure PIN" : "Enter Security PIN"}
+                        </p>
+                        
+                        <div className="space-y-4">
+                            <input 
+                                type="password" 
+                                value={pin}
+                                onChange={(e) => {setPin(e.target.value); setError("");}}
+                                className="w-full bg-dark/50 border border-slate-600 rounded-xl px-4 py-3 text-center text-2xl tracking-widest text-white outline-none focus:border-brand"
+                                placeholder="••••"
+                                maxLength="6"
+                            />
+                            {error && <p className="text-red-400 text-xs text-center animate-pulse">{error}</p>}
+                            <Button onClick={handleLogin} className="w-full">
+                                {setupMode ? "Initialize System" : "Unlock Securely"}
+                            </Button>
+                        </div>
+                    </div>
+                    <p className="absolute bottom-6 text-slate-600 text-xs font-mono">SECURE BOOT // V3.0.1</p>
+                </div>
+            );
+        };
+
+        // --- MAIN APP ---
+        function App() {
+            const [auth, setAuth] = useState(false);
+            const [view, setView] = useState('dashboard');
+            const [data, setData] = useState({ classes: [], logs: [] });
+            const [selClass, setSelClass] = useState(null);
+            
+            // Load & Decrypt Data on Mount
+            useEffect(() => {
+                if (auth) {
+                    lucide.createIcons();
+                    const encrypted = localStorage.getItem("db_encrypted");
+                    if (encrypted) {
+                        const decrypted = decryptData(encrypted);
+                        if (decrypted) setData(decrypted);
+                    }
+                }
+            }, [auth]);
+
+            // Auto-Save & Encrypt
+            useEffect(() => {
+                if (auth && data.classes.length > 0) { // Only save if data exists to avoid overwrite empty
+                    localStorage.setItem("db_encrypted", encryptData(data));
+                }
+            }, [data, auth]);
+
+            // Add Audit Log
+            const logAction = (action) => {
+                const newLog = { 
+                    id: Date.now(), 
+                    action, 
+                    time: new Date().toLocaleTimeString(), 
+                    date: new Date().toLocaleDateString() 
+                };
+                setData(prev => ({ ...prev, logs: [newLog, ...prev.logs].slice(0, 50) })); // Keep last 50
+            };
+
+            // Backup & Restore
+            const backupData = () => {
+                const blob = new Blob([encryptData(data)], {type: "text/plain"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `SECURE_BACKUP_${new Date().toISOString().slice(0,10)}.enc`;
+                a.click();
+                logAction("System Backup Generated");
+            };
+
+            const restoreData = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const decrypted = decryptData(event.target.result);
+                    if (decrypted) {
+                        setData(decrypted);
+                        alert("System Restored Successfully");
+                        logAction("System Restored from File");
+                    } else {
+                        alert("Integrity Check Failed: Invalid Backup File");
+                    }
+                };
+                reader.readAsText(file);
+            };
+
+            if (!auth) return <Login onSuccess={() => setAuth(true)} />;
+
+            return (
+                <div className="flex h-screen bg-dark">
+                    {/* Sidebar */}
+                    <div className="w-20 lg:w-64 border-r border-white/10 flex flex-col bg-surface/30 backdrop-blur-md">
+                        <div className="p-6 flex items-center gap-3 text-white font-bold text-xl tracking-tighter">
+                            <div className="w-8 h-8 bg-brand rounded-lg flex items-center justify-center text-white"><Icon name="aperture" size={18}/></div>
+                            <span className="hidden lg:block">AttendPro</span>
+                        </div>
+                        
+                        <nav className="flex-1 px-3 space-y-2 mt-4">
+                            <SidebarItem icon="layout-dashboard" label="Dashboard" active={view==='dashboard'} onClick={()=>setView('dashboard')} />
+                            <SidebarItem icon="users" label="Classes" active={view==='classes' || view==='detail'} onClick={()=>setView('classes')} />
+                            <SidebarItem icon="shield-alert" label="Audit Logs" active={view==='logs'} onClick={()=>setView('logs')} />
+                            <SidebarItem icon="settings" label="System" active={view==='settings'} onClick={()=>setView('settings')} />
+                        </nav>
+                        
+                        <div className="p-4 border-t border-white/10">
+                            <div className="flex items-center gap-3 text-slate-400 text-xs">
+                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                                <span className="hidden lg:block">System Online</span>
                             </div>
-                        )}
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-white font-bold">A</div>
+                        </div>
                     </div>
 
-                    {/* Views */}
-                    {view === 'list' && (
-                        <div className="space-y-6 animate-fade-in">
-                            <div className="glass p-2 rounded-2xl flex gap-2">
-                                <input className="bg-transparent flex-1 px-4 outline-none dark:text-white" placeholder="New Subject Name..." value={input} onChange={e=>setInput(e.target.value)} />
-                                <Button onClick={addClass} className="!py-2 !px-3 rounded-lg"><Icon name="plus"/></Button>
+                    {/* Main Content */}
+                    <main className="flex-1 overflow-y-auto relative">
+                        {/* Top Bar */}
+                        <header className="h-16 border-b border-white/10 flex items-center justify-between px-6 bg-dark/80 backdrop-blur sticky top-0 z-20">
+                            <h2 className="font-semibold text-white capitalize">{view}</h2>
+                            <div className="flex items-center gap-4">
+                                <button className="p-2 hover:bg-white/10 rounded-full text-slate-400"><Icon name="bell" /></button>
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand to-purple-500"></div>
                             </div>
-                            <div className="grid gap-4">
-                                {classes.map(c => (
-                                    <div key={c.id} onClick={()=>{setSelClass(c); setView('detail')}} className="card-bg bg-white p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 active:scale-95 transition-transform relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
-                                        <div className="flex justify-between items-center">
-                                            <div>
-                                                <h2 className="text-xl font-bold dark:text-white">{c.name}</h2>
-                                                <p className="text-slate-500 text-sm">{c.students.length} Students • {c.sessions.length} Sessions</p>
-                                            </div>
-                                            <button onClick={(e)=>{e.stopPropagation();delClass(c.id)}} className="z-10 text-slate-300 hover:text-red-500"><Icon name="trash"/></button>
+                        </header>
+
+                        <div className="p-6 max-w-5xl mx-auto space-y-6">
+                            
+                            {/* DASHBOARD VIEW */}
+                            {view === 'dashboard' && (
+                                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                                        <StatCard title="Total Classes" value={data.classes?.length || 0} icon="folder" color="bg-blue-500" />
+                                        <StatCard title="Total Students" value={data.classes?.reduce((acc, c) => acc + c.students.length, 0) || 0} icon="users" color="bg-purple-500" />
+                                        <StatCard title="Security Status" value="Encrypted" icon="lock" color="bg-green-500" />
+                                    </div>
+                                    <div className="bg-surface/40 border border-white/5 rounded-2xl p-6">
+                                        <h3 className="text-lg font-bold text-white mb-4">Quick Actions</h3>
+                                        <div className="flex gap-4">
+                                            <Button onClick={()=>setView('classes')} icon="plus-circle">Manage Classes</Button>
+                                            <Button variant="outline" onClick={backupData} icon="download">Backup Database</Button>
                                         </div>
                                     </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {view === 'detail' && (
-                        <div className="space-y-6">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-gradient-to-br from-primary to-secondary p-5 rounded-2xl text-white shadow-lg shadow-primary/20">
-                                    <p className="text-xs opacity-80">Total Students</p>
-                                    <p className="text-3xl font-bold">{selClass.students.length}</p>
                                 </div>
-                                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
-                                    <p className="text-xs text-slate-500">Classes Held</p>
-                                    <p className="text-3xl font-bold dark:text-white">{selClass.sessions.length}</p>
-                                </div>
-                            </div>
+                            )}
 
-                            <Button onClick={()=>setView('mark')} className="w-full shadow-xl">Start Attendance Session</Button>
-                            <Button onClick={exportCSV} variant="ghost" className="w-full border border-dashed border-slate-300"><Icon name="download"/> Export Report (CSV)</Button>
+                            {/* CLASSES VIEW */}
+                            {view === 'classes' && (
+                                <ClassesManager 
+                                    classes={data.classes || []} 
+                                    setClasses={newCls => setData({...data, classes: newCls})} 
+                                    onSelect={(cls)=>{setSelClass(cls); setView('detail')}} 
+                                    logAction={logAction}
+                                />
+                            )}
 
-                            <div className="mt-6">
-                                <div className="flex justify-between items-end mb-4">
-                                    <h3 className="font-bold text-lg dark:text-white">Student List</h3>
-                                    <div className="flex gap-2">
-                                        <input className="bg-white dark:bg-slate-800 px-3 py-1 rounded-lg text-sm border-none outline-none dark:text-white w-32" placeholder="Add Name" value={input} onChange={e=>setInput(e.target.value)} />
-                                        <button onClick={addStu} className="text-primary font-bold">+</button>
+                            {/* CLASS DETAIL & ATTENDANCE */}
+                            {view === 'detail' && selClass && (
+                                <ClassDetail 
+                                    cls={selClass} 
+                                    onBack={()=>setView('classes')}
+                                    onUpdate={(updatedCls) => {
+                                        const newClasses = data.classes.map(c => c.id === updatedCls.id ? updatedCls : c);
+                                        setData({...data, classes: newClasses});
+                                        setSelClass(updatedCls);
+                                    }}
+                                    logAction={logAction}
+                                />
+                            )}
+
+                            {/* LOGS VIEW */}
+                            {view === 'logs' && (
+                                <div className="space-y-4">
+                                    <h3 className="font-bold text-white">Security & Audit Trail</h3>
+                                    <div className="bg-surface/30 rounded-xl border border-white/10 overflow-hidden font-mono text-sm">
+                                        {data.logs && data.logs.map(log => (
+                                            <div key={log.id} className="p-3 border-b border-white/5 flex justify-between hover:bg-white/5">
+                                                <span className="text-brand">[{log.time}]</span>
+                                                <span className="text-slate-300">{log.action}</span>
+                                                <span className="text-slate-500">{log.date}</span>
+                                            </div>
+                                        ))}
+                                        {(!data.logs || data.logs.length === 0) && <p className="p-4 text-center text-slate-500">No activity recorded.</p>}
                                     </div>
                                 </div>
-                                <div className="space-y-3">
-                                    {selClass.students.map(s => {
-                                        let p=0; selClass.sessions.forEach(sess=>{if(sess.records[s.id]==='present')p++});
-                                        const pct = selClass.sessions.length===0?0:Math.round((p/selClass.sessions.length)*100);
-                                        return (
-                                            <div key={s.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl flex justify-between items-center shadow-sm">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`w-2 h-10 rounded-full ${pct<75?'bg-red-500':'bg-green-500'}`}></div>
-                                                    <div>
-                                                        <p className="font-bold dark:text-white">{s.name}</p>
-                                                        <p className="text-xs text-slate-400">{pct}% Attendance</p>
-                                                    </div>
-                                                </div>
-                                                <span className="font-mono font-bold text-slate-300">{p}/{selClass.sessions.length}</span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                            )}
 
-                    {view === 'mark' && <MarkSession selClass={selClass} onSave={saveAtt} onCancel={()=>setView('detail')} />}
+                             {/* SETTINGS VIEW */}
+                             {view === 'settings' && (
+                                <div className="space-y-6">
+                                    <div className="bg-surface/30 p-6 rounded-2xl border border-white/10">
+                                        <h3 className="font-bold text-white mb-2">Disaster Recovery</h3>
+                                        <p className="text-sm text-slate-400 mb-4">Export your encrypted database to a secure file location.</p>
+                                        <div className="flex flex-col gap-3">
+                                            <Button onClick={backupData} icon="download">Export Encrypted Backup</Button>
+                                            <div className="relative">
+                                                <input type="file" onChange={restoreData} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                                                <Button variant="outline" className="w-full" icon="upload">Restore from Backup</Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-red-500/10 p-6 rounded-2xl border border-red-500/20">
+                                        <h3 className="font-bold text-red-400 mb-2">Danger Zone</h3>
+                                        <Button variant="danger" icon="trash-2" onClick={()=>{
+                                            if(confirm("Factory Reset: This will wipe all data securely. Continue?")) {
+                                                localStorage.clear();
+                                                window.location.reload();
+                                            }
+                                        }}>Factory Reset System</Button>
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+                    </main>
                 </div>
             );
         }
 
-        const MarkSession = ({ selClass, onSave, onCancel }) => {
-            const [st, setSt] = useState({});
-            useEffect(() => { const i={}; selClass.students.forEach(s=>i[s.id]='present'); setSt(i); }, []);
-            const toggle = (id) => setSt(p=>({...p, [id]: p[id]==='present'?'absent':'present'}));
-            const count = Object.values(st).filter(s=>s==='present').length;
+        // --- SUB-COMPONENTS (Simplified for brevity) ---
+        
+        const SidebarItem = ({ icon, label, active, onClick }) => (
+            <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${active ? 'sidebar-active font-bold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+                <Icon name={icon} size={20} />
+                <span className="hidden lg:block">{label}</span>
+            </button>
+        );
+
+        const StatCard = ({ title, value, icon, color }) => (
+            <div className="bg-surface/40 p-5 rounded-2xl border border-white/5 flex items-center justify-between">
+                <div>
+                    <p className="text-slate-400 text-sm">{title}</p>
+                    <p className="text-3xl font-bold text-white mt-1">{value}</p>
+                </div>
+                <div className={`p-3 rounded-xl ${color} bg-opacity-20 text-white`}><Icon name={icon} /></div>
+            </div>
+        );
+
+        const ClassesManager = ({ classes, setClasses, onSelect, logAction }) => {
+            const [input, setInput] = useState("");
+            const add = () => {
+                if(!input.trim()) return;
+                setClasses([...classes, {id: Date.now(), name: input, students: [], sessions: []}]);
+                logAction(`Class Created: ${input}`);
+                setInput("");
+            };
+            return (
+                <div className="space-y-4">
+                    <div className="flex gap-2">
+                        <input className="flex-1 bg-surface/50 border border-slate-600 rounded-xl px-4 text-white outline-none focus:border-brand" placeholder="New Class Name..." value={input} onChange={e=>setInput(e.target.value)}/>
+                        <Button onClick={add} icon="plus">Add</Button>
+                    </div>
+                    <div className="grid gap-3">
+                        {classes.map(c => (
+                            <div key={c.id} onClick={()=>onSelect(c)} className="bg-surface/40 p-4 rounded-xl border border-white/5 hover:border-brand/50 cursor-pointer transition-all flex justify-between items-center group">
+                                <div>
+                                    <h4 className="font-bold text-white">{c.name}</h4>
+                                    <p className="text-xs text-slate-400">{c.students.length} Students</p>
+                                </div>
+                                <Icon name="chevron-right" className="text-slate-600 group-hover:text-brand" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )
+        };
+
+        const ClassDetail = ({ cls, onBack, onUpdate, logAction }) => {
+            const [mode, setMode] = useState('view'); // view, mark
+            const [newStu, setNewStu] = useState("");
+            
+            const addStu = () => {
+                if(!newStu) return;
+                onUpdate({...cls, students: [...cls.students, {id: Date.now(), name: newStu}]});
+                logAction(`Student Added to ${cls.name}: ${newStu}`);
+                setNewStu("");
+            };
+
+            const saveSession = (statusMap) => {
+                // GET GEO-LOCATION
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition((position) => {
+                        const loc = `${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`;
+                        const session = {
+                            id: Date.now(),
+                            date: new Date().toLocaleString(),
+                            location: loc, // ANTI-PROXY FEATURE
+                            records: statusMap
+                        };
+                        onUpdate({...cls, sessions: [session, ...cls.sessions]});
+                        logAction(`Attendance Saved for ${cls.name} at [${loc}]`);
+                        setMode('view');
+                    }, (err) => {
+                        alert("GPS Required for Anti-Proxy Verification");
+                    });
+                } else {
+                    alert("GPS Not Supported");
+                }
+            };
+
+            if(mode === 'mark') return <MarkScreen cls={cls} onSave={saveSession} onCancel={()=>setMode('view')} />;
 
             return (
-                <div className="flex flex-col h-[85vh]">
-                    <div className="text-center mb-6">
-                        <h2 className="text-2xl font-bold dark:text-white">Roll Call</h2>
-                        <p className="text-primary font-medium">{count} Present</p>
+                <div className="space-y-6">
+                    <div className="flex items-center gap-4">
+                        <Button variant="ghost" onClick={onBack} icon="arrow-left">Back</Button>
+                        <h2 className="text-2xl font-bold text-white">{cls.name}</h2>
                     </div>
-                    <div className="flex-1 overflow-y-auto space-y-3 px-1">
-                        {selClass.students.map(s => {
-                            const isP = st[s.id] === 'present';
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-surface/30 p-4 rounded-xl border border-white/10 h-64 overflow-y-auto">
+                            <div className="flex justify-between items-center mb-4 sticky top-0 bg-surface/30 p-2 backdrop-blur">
+                                <h3 className="font-bold text-slate-300">Roster</h3>
+                                <div className="flex gap-2">
+                                    <input className="w-32 bg-dark/50 rounded-lg px-2 text-sm text-white border border-slate-700" placeholder="Name..." value={newStu} onChange={e=>setNewStu(e.target.value)} />
+                                    <button onClick={addStu} className="text-brand font-bold">+</button>
+                                </div>
+                            </div>
+                            {cls.students.map(s => <div key={s.id} className="p-2 text-slate-300 border-b border-white/5">{s.name}</div>)}
+                        </div>
+                        
+                        <div className="space-y-4">
+                            <Button className="w-full py-6 text-lg" onClick={()=>setMode('mark')} icon="check-circle">Launch Attendance</Button>
+                            <div className="bg-surface/30 p-4 rounded-xl border border-white/10">
+                                <h3 className="font-bold text-slate-300 mb-2">Session History</h3>
+                                <div className="space-y-2 max-h-40 overflow-y-auto">
+                                    {cls.sessions.map(s => (
+                                        <div key={s.id} className="text-xs p-2 bg-dark/40 rounded border border-white/5">
+                                            <div className="flex justify-between text-slate-200">
+                                                <span>{s.date.split(',')[0]}</span>
+                                                <span className="text-brand flex items-center gap-1"><Icon name="map-pin" size={10}/> {s.location || "No GPS"}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const MarkScreen = ({ cls, onSave, onCancel }) => {
+            const [st, setSt] = useState({});
+            useEffect(() => {
+                const i = {}; cls.students.forEach(s => i[s.id] = 'present');
+                setSt(i);
+            }, []);
+
+            return (
+                <div className="h-full flex flex-col">
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-xl font-bold text-white">Live Session</h2>
+                        <div className="flex gap-2">
+                            <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+                            <Button onClick={()=>onSave(st)} icon="save">Secure Save</Button>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-2">
+                        {cls.students.map(s => {
+                            const p = st[s.id] === 'present';
                             return (
-                                <div key={s.id} onClick={()=>toggle(s.id)} className={`p-4 rounded-2xl flex items-center justify-between transition-all cursor-pointer border-2 ${isP ? 'bg-white dark:bg-slate-800 border-transparent shadow-sm' : 'bg-red-50 border-red-500 dark:bg-red-900/20'}`}>
-                                    <span className={`font-bold ${isP?'dark:text-white':'text-red-600'}`}>{s.name}</span>
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isP?'bg-green-100 text-green-600':'bg-red-500 text-white'}`}>
-                                        <Icon name={isP?'check':'x'} size={16}/>
-                                    </div>
+                                <div key={s.id} onClick={()=>setSt({...st, [s.id]: p ? 'absent' : 'present'})} 
+                                    className={`p-4 rounded-xl border cursor-pointer flex justify-between items-center transition-all ${p ? 'bg-brand/10 border-brand text-white' : 'bg-red-500/10 border-red-500 text-red-400'}`}>
+                                    <span className="font-bold">{s.name}</span>
+                                    <Icon name={p ? "check" : "x"} />
                                 </div>
                             )
                         })}
-                    </div>
-                    <div className="mt-4 grid grid-cols-2 gap-4">
-                        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
-                        <Button onClick={()=>onSave(st)}>Save Record</Button>
                     </div>
                 </div>
             );
@@ -252,6 +483,11 @@
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
+        
+        // Init Icons
+        setTimeout(() => lucide.createIcons(), 500);
     </script>
 </body>
 </html>
+
+
