@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Attendance Pro</title>
+    <title>Attendance Pro (Anonymous)</title>
     
     <!-- Tailwind CSS (Aesthetics) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -35,19 +35,21 @@
 </head>
 <body class="bg-gray-100 text-gray-800 h-screen flex flex-col overflow-hidden">
 
-    <!-- LOGIN SCREEN -->
+    <!-- LOGIN SCREEN (Name Input + Anonymous Sign In) -->
     <div id="login-screen" class="fixed inset-0 z-50 bg-white flex flex-col justify-center items-center p-6">
         <div class="text-center w-full max-w-sm">
             <div class="bg-indigo-100 p-5 rounded-full inline-flex mb-6">
-                <i data-lucide="shield-check" class="w-12 h-12 text-indigo-600"></i>
+                <i data-lucide="map-pin" class="w-12 h-12 text-indigo-600"></i>
             </div>
             <h1 class="text-3xl font-bold text-gray-900 mb-2">Attendance Pro</h1>
-            <p class="text-gray-500 mb-8">Secure GPS & Device Locked System</p>
+            <p class="text-gray-500 mb-6">Enter your full name to start</p>
             
-            <button onclick="handleGoogleLogin()" 
-                    class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 font-semibold py-4 rounded-xl shadow-sm hover:bg-gray-50 transition active:scale-95">
-                <img src="https://www.svgrepo.com/show/475656/google-color.svg" class="w-6 h-6" alt="Google">
-                Sign in with Google
+            <input type="text" id="username-input" placeholder="Enter your full name" 
+                   class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4 text-lg">
+
+            <button onclick="handleLogin()" 
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl shadow-lg transition transform active:scale-95">
+                Start Tracking
             </button>
             <p class="text-xs text-red-400 mt-4 hidden" id="device-lock-msg">
                 🔒 This device is locked to another user.
@@ -61,7 +63,7 @@
         <!-- Header -->
         <header class="bg-white border-b border-gray-200 p-4 flex justify-between items-center sticky top-0 z-10 shadow-sm">
             <div class="flex items-center gap-2">
-                <img id="user-photo" src="" class="w-8 h-8 rounded-full border border-gray-200">
+                <div id="user-initial" class="w-8 h-8 rounded-full bg-gray-200 text-gray-700 font-bold flex items-center justify-center text-sm">U</div>
                 <div>
                     <h2 class="font-bold text-sm text-gray-800" id="display-name">User</h2>
                     <p class="text-xs text-green-600 font-medium" id="current-class-display">Select Class</p>
@@ -79,6 +81,7 @@
             <div class="mb-6">
                 <label class="text-xs font-bold text-gray-400 uppercase tracking-wide">Select Class</label>
                 <select id="class-select" onchange="updateClassUI()" class="w-full mt-1 p-3 bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">-- Select Class --</option>
                     <option value="Class A">Class A (Morning)</option>
                     <option value="Class B">Class B (Afternoon)</option>
                     <option value="Lab Session">Lab Session</option>
@@ -163,7 +166,7 @@
                     </div>
 
                     <div class="pt-2 border-t">
-                        <button onclick="auth.signOut(); window.location.reload();" class="w-full text-red-600 py-2 text-sm font-bold">Log Out</button>
+                        <button onclick="auth.signOut(); localStorage.clear(); window.location.reload();" class="w-full text-red-600 py-2 text-sm font-bold">Log Out (Clear Device Lock)</button>
                     </div>
                 </div>
             </div>
@@ -191,7 +194,7 @@
 
     <script>
         // ==========================================
-        //  YOUR FIREBASE CONFIGURATION (CLEANED AND EMBEDDED)
+        //  YOUR FIREBASE CONFIGURATION (EMBEDDED)
         // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyBXk910-9A54W3tukJ3Yprc",
@@ -207,13 +210,11 @@
         // ==========================================
         const GEOFENCE_RADIUS = 100; // Meters
         const ADMIN_PIN = "1234";    // PIN to access settings/delete
-        const APP_VERSION = "v2.0";
 
         // Init Firebase
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const auth = firebase.auth();
-        const googleProvider = new firebase.auth.GoogleAuthProvider();
 
         let currentUser = null;
         let officeLocation = null;
@@ -221,58 +222,64 @@
         let isAdminUnlocked = false;
 
         // ------------------------------------------------
-        // 1. AUTH & DEVICE LOCK LOGIC
+        // 1. AUTH & DEVICE LOCK LOGIC (Anonymous)
         // ------------------------------------------------
-        function handleGoogleLogin() {
-            // Device Lock Check
-            const lockedEmail = localStorage.getItem('locked_email');
-            
-            auth.signInWithPopup(googleProvider).then((result) => {
-                const email = result.user.email;
-                
-                // If device is locked to another email, reject
-                if (lockedEmail && lockedEmail !== email) {
-                    auth.signOut();
-                    document.getElementById('device-lock-msg').classList.remove('hidden');
-                    return;
-                }
+        
+        function getInitials(name) {
+            if (!name) return 'U';
+            const parts = name.split(' ');
+            if (parts.length > 1) {
+                return parts[0][0] + parts[1][0];
+            }
+            return parts[0][0];
+        }
 
-                // Lock device to this user
-                localStorage.setItem('locked_email', email);
-                initApp(result.user);
+        function handleLogin() {
+            const name = document.getElementById('username-input').value.trim();
+            if (!name) return showToast('Please enter your full name', 'error');
+
+            const lockedName = localStorage.getItem('locked_user_name');
+            
+            // 1. Check Device Lock
+            if (lockedName && lockedName !== name) {
+                document.getElementById('device-lock-msg').classList.remove('hidden');
+                document.getElementById('device-lock-msg').innerText = `🔒 This device is locked to: ${lockedName}.`;
+                return;
+            }
+
+            // 2. Sign in Anonymously and save name
+            auth.signInAnonymously().then(result => {
+                localStorage.setItem('user_display_name', name);
+                localStorage.setItem('locked_user_name', name); // Lock device to this name
+                initApp(result.user, name);
             }).catch(e => {
-                // Check if error is 'auth/popup-closed-by-user'
-                if (e.code === 'auth/popup-closed-by-user') {
-                    showToast("Login cancelled.", 'info');
-                } else {
-                    showToast("Login Failed: Did you enable Google Auth in Firebase?", 'error');
-                    console.error("Auth Error:", e);
-                }
+                showToast("Login Failed: Did you enable Anonymous Auth in Firebase?", 'error');
             });
         }
 
         auth.onAuthStateChanged(user => {
             if (user) {
-                const lockedEmail = localStorage.getItem('locked_email');
-                if (lockedEmail && lockedEmail !== user.email) {
-                    auth.signOut(); // Kick out if mismatch
+                const name = localStorage.getItem('user_display_name');
+                if (name) {
+                    initApp(user, name);
                 } else {
-                    localStorage.setItem('locked_email', user.email); // Ensure lock
-                    initApp(user);
+                    // Logged in anonymously but name is lost, force re-entry
+                    auth.signOut();
+                    window.location.reload();
                 }
             }
         });
 
-        async function initApp(user) {
+        async function initApp(user, name) {
             currentUser = user;
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('app-content').classList.remove('hidden');
             
-            document.getElementById('display-name').innerText = user.displayName;
-            document.getElementById('user-photo').src = user.photoURL || 'https://placehold.co/40x40/cccccc/333333?text=U';
+            document.getElementById('display-name').innerText = name;
+            document.getElementById('user-initial').innerText = getInitials(name);
 
             await loadSettings();
-            updateClassUI(); // Calls checkTodayStatus internally
+            updateClassUI(); 
             loadHistory();
             lucide.createIcons();
         }
@@ -285,16 +292,18 @@
 
         function updateClassUI() {
             const cls = document.getElementById('class-select').value;
-            document.getElementById('current-class-display').innerText = cls;
-            checkTodayStatus(); // Re-check status if class changes
+            document.getElementById('current-class-display').innerText = cls || 'Select Class';
+            checkTodayStatus(); 
         }
 
         function checkTodayStatus() {
-            if (!currentUser) return;
+            if (!currentUser || !document.getElementById('class-select').value) {
+                setStatusUI("FRESH");
+                return;
+            }
             const dateStr = new Date().toLocaleDateString().replace(/\//g, '-');
             const cls = document.getElementById('class-select').value;
             
-            // Check if record exists for User + Date + Class
             db.collection('attendance')
               .where('uid', '==', currentUser.uid)
               .where('dateId', '==', dateStr)
@@ -388,11 +397,11 @@
         async function processCheckIn() {
             const dateStr = new Date().toLocaleDateString().replace(/\//g, '-');
             const cls = document.getElementById('class-select').value;
+            const name = localStorage.getItem('user_display_name');
             
             const record = {
                 uid: currentUser.uid,
-                name: currentUser.displayName,
-                email: currentUser.email,
+                name: name,
                 class: cls,
                 dateId: dateStr,
                 checkInTime: new Date().toLocaleTimeString(),
@@ -497,7 +506,6 @@
                       
                       const exportRow = {
                           Name: d.name,
-                          Email: d.email,
                           Class: d.class,
                           Date: d.dateId,
                           CheckIn: d.checkInTime,
